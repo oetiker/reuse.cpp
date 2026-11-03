@@ -1,0 +1,3 @@
+input f32 48000
+out_mag f32 321 601
+output f32 48000

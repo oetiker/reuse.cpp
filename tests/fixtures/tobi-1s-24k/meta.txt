@@ -1,0 +1,5 @@
+sample_rate 24000
+n_fft 960
+hop 120
+win 960
+n_samples 24000

@@ -1,0 +1,3 @@
+input f32 88200
+out_mag f32 883 401
+output f32 88200

@@ -1,0 +1,50 @@
+reuse.cpp
+=========
+
+This repository is a C++/ggml port of NVIDIA RE-USE (speech enhancement),
+as released in the Hugging Face repository
+nvidia/NVIDIA-NemotronLabs-RE-USE (revision 31f82f2efad1095034492f236e8dac9239ba713b).
+
+Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+(SPDX-FileCopyrightText as found in the upstream source files.)
+
+The upstream model, its code and this port are governed by the OpenMDW License
+Agreement, version 1.1 (OpenMDW-1.1); see LICENSE. The files under tools/nvidia/
+are NVIDIA's unmodified model code and configuration. tools/run.py,
+tools/make_fixtures.py and tools/mamba_ssm/ are reference/test tooling written
+for this port. The model weights (model.safetensors) are NOT distributed in
+this repository.
+
+This is an independent port; it is not endorsed by or affiliated with NVIDIA.
+
+Third-party notices (from the upstream LICENSE): librosa (ISC), torch and
+torchaudio (BSD-3-Clause), PyYAML (MIT), einops (MIT), mamba_ssm (Apache-2.0).
+
+pocketfft (planned FFT dependency, C++ header-only version)
+-----------------------------------------------------------
+Copyright (C) 2010-2022 Max-Planck-Society
+Copyright (C) 2019-2020 Peter Bell
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+* Neither the name of the copyright holder nor the names of its contributors may
+  be used to endorse or promote products derived from this software without
+  specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

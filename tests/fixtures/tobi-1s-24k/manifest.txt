@@ -1,0 +1,11 @@
+input f32 24000
+stft_mag f32 481 201
+stft_pha f32 481 201
+enc_out f32 241 51 64
+block1_out f32 241 51 64
+block30_out f32 241 51 64
+mag_out f32 482 204 1
+pha_r f32 482 204 1
+pha_i f32 482 204 1
+out_mag f32 481 201
+output f32 24000

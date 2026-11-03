@@ -1,0 +1,8 @@
+# Reference tooling (run.py, make_fixtures.py). Python 3.12.
+torch
+torchaudio
+numpy
+soundfile
+safetensors
+einops
+pyyaml
