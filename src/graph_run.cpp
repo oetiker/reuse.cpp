@@ -2,9 +2,12 @@
 #include "graph.h"
 #include "model.h"
 
+#include <cstdio>
+#include <cstring>
 #include <stdexcept>
+#include <vector>
 
-GraphRun::GraphRun(size_t max_nodes) {
+GraphRun::GraphRun(size_t max_nodes) : max_nodes(max_nodes) {
     ggml_init_params p = {
         /*.mem_size   =*/ ggml_tensor_overhead() * max_nodes + ggml_graph_overhead_custom(max_nodes, false),
         /*.mem_buffer =*/ nullptr,
@@ -32,6 +35,28 @@ void GraphRun::alloc(ggml_backend_t be, ggml_tensor * out) {
     galloc_ = ggml_gallocr_new(ggml_backend_get_default_buffer_type(be));
     if (!galloc_ || !ggml_gallocr_alloc_graph(galloc_, gf))
         throw std::runtime_error(std::string("graph: cannot allocate compute buffer on ") + ggml_backend_name(be));
+    upload_consts();
+}
+
+// Fills the graph constants created by const_* (graph.h), identified by their "const:" name.
+void GraphRun::upload_consts() {
+    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t; t = ggml_get_next_tensor(ctx, t)) {
+        if (std::strncmp(t->name, "const:", 6) != 0) continue;
+        if (t->view_src) continue;  // views (e.g. "const:rev:... (reshaped)") share the base's data
+        if (!t->buffer) continue;   // created but not used by the graph
+        const size_t n = (size_t) ggml_nelements(t);
+        if (std::strncmp(t->name, "const:zero:", 11) == 0) {
+            std::vector<char> zero(ggml_nbytes(t), 0);
+            ggml_backend_tensor_set(t, zero.data(), 0, zero.size());
+        } else if (std::strncmp(t->name, "const:rev:", 10) == 0 && t->type == GGML_TYPE_I32) {
+            const int64_t L = t->ne[0];
+            std::vector<int32_t> idx(n);
+            for (size_t k = 0; k < n; ++k) idx[k] = (int32_t) (L - 1 - (int64_t) (k % (size_t) L));
+            ggml_backend_tensor_set(t, idx.data(), 0, n * sizeof(int32_t));
+        } else {
+            throw std::runtime_error(std::string("graph: unknown constant ") + t->name);
+        }
+    }
 }
 
 void GraphRun::compute(ggml_backend_t be) {
@@ -43,6 +68,13 @@ void GraphRun::compute(ggml_backend_t be) {
 static ggml_tensor * build_tap(ggml_context * ctx, const Weights & w, const std::string & tap, ggml_tensor * mag_pha) {
     ggml_tensor * x = encoder(ctx, w, mag_pha);
     if (tap == "enc_out") return x;
+    // "block<N>_out": output of TF-Mamba block N (1-based)
+    int n = 0;
+    if (std::sscanf(tap.c_str(), "block%d_out", &n) == 1 && tap == "block" + std::to_string(n) + "_out" &&
+        n >= 1 && n <= w.hp.num_tfmamba) {
+        for (int i = 0; i < n; ++i) x = tf_mamba_block(ctx, w, i, x);
+        return x;
+    }
     return nullptr;
 }
 
@@ -55,7 +87,7 @@ std::vector<float> run_tap(reuse_ctx * rctx, const std::string & tap,
         throw std::runtime_error("run_tap: mag/pha size does not match n_freq * n_frames");
     ggml_backend_t be = rctx->backend.be;
 
-    GraphRun g;
+    GraphRun g(graph_max_nodes(rctx->weights.hp.num_tfmamba));
     ggml_tensor * in = ggml_new_tensor_3d(g.ctx, GGML_TYPE_F32, n_freq, n_frames, 2);
     ggml_set_name(in, "mag_pha");
     ggml_set_input(in);

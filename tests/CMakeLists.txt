@@ -44,3 +44,11 @@ target_link_libraries(test_encoder PRIVATE reuse)
 add_test(NAME encoder COMMAND test_encoder)
 set_tests_properties(encoder PROPERTIES
     ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
+
+# TF-Mamba block tests vs. PyTorch fixtures (need REUSE_GGUF; skip otherwise).
+add_executable(test_mamba test_mamba.cpp)
+target_include_directories(test_mamba PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_mamba PRIVATE reuse)
+add_test(NAME mamba COMMAND test_mamba)
+set_tests_properties(mamba PROPERTIES
+    ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")

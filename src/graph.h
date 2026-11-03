@@ -50,11 +50,32 @@ ggml_tensor * dense_block(ggml_context * ctx, const Weights & w, const std::stri
 // Returns [F', T', 64, 1] with F' = (F+2-3)/2+1, T' = (T+2-1)/4+1.
 ggml_tensor * encoder(ggml_context * ctx, const Weights & w, ggml_tensor * mag_pha);
 
+// Graph constants: leaf tensors marked as inputs whose contents GraphRun::alloc generates and
+// uploads (no host data is needed at build time). Each is created once per context and shared
+// by every user (looked up by name, "const:<kind>:<shape>").
+//   const_zeros_f32: all zeros (e.g. the initial SSM state).
+//   const_zeros_i32: all zeros (e.g. ssm_scan state ids: every sequence starts from state 0).
+//   const_rev_i32:   [L, n] with element (j, s) = L-1-j: get_rows indices that reverse dimension 1
+//                    of a [D, L, n] tensor.
+ggml_tensor * const_zeros_f32(ggml_context * ctx, int64_t ne0, int64_t ne1, int64_t ne2, int64_t ne3);
+ggml_tensor * const_zeros_i32(ggml_context * ctx, int64_t n);
+ggml_tensor * const_rev_i32(ggml_context * ctx, int64_t L, int64_t n);
+
+// One TFMambaBlock (torch module "TSMamba.<i>") on x [F', T', C, 1] (C = hid_feature):
+// x = time(x) + x with sequences along T (one per frequency bin), then x = freq(x) + x with
+// sequences along F (one per frame). time/freq are bidirectional MambaBlocks (Mamba-1 via
+// ggml_ssm_conv / ggml_ssm_scan). Returns [F', T', C, 1].
+ggml_tensor * tf_mamba_block(ggml_context * ctx, const Weights & w, int i, ggml_tensor * x);
+
+// GraphRun node/tensor capacity for a forward graph through `n_blocks` TF-Mamba blocks, with a
+// wide margin (a ggml context overflow aborts the process, so this must never be tight).
+size_t graph_max_nodes(int n_blocks);
+
 // Test hook (not part of the public C API): builds the forward graph from STFT inputs
 // mag/pha (each n_freq * n_frames floats, frequency innermost) up to the named tap, runs it on
 // ctx's backend, and returns the tap's data (ggml order; shape in *ne_out if given).
-// Taps: "enc_out" (more are added by later tasks). Throws std::runtime_error on unknown tap
-// or backend failure.
+// Taps: "enc_out", "block<N>_out" (output of TF-Mamba block N, 1-based, N <= num_tfmamba).
+// Throws std::runtime_error on unknown tap or backend failure.
 std::vector<float> run_tap(reuse_ctx * ctx, const std::string & tap,
                            const std::vector<float> & mag, const std::vector<float> & pha,
                            int n_freq, int n_frames, std::vector<int64_t> * ne_out = nullptr);
@@ -63,6 +84,7 @@ std::vector<float> run_tap(reuse_ctx * ctx, const std::string & tap,
 // Usage: build nodes in g.ctx; g.alloc(be, out) (expands the graph, verifies every node is
 // supported by `be` — there is no CPU fallback — and allocates); upload inputs with
 // ggml_backend_tensor_set; g.compute(be); read outputs with ggml_backend_tensor_get.
+// alloc also uploads the contents of all graph constants (const_* above).
 struct GraphRun {
     explicit GraphRun(size_t max_nodes = 16384);
     ~GraphRun();
@@ -74,7 +96,9 @@ struct GraphRun {
 
     ggml_context * ctx = nullptr;
     ggml_cgraph * gf = nullptr;
+    size_t max_nodes = 0;  // capacity of ctx (tensors) and gf (nodes, leafs)
 
 private:
+    void upload_consts();
     ggml_gallocr_t galloc_ = nullptr;
 };
