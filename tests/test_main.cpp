@@ -39,9 +39,9 @@ static void metrics_helpers() {
     CHECK(snr_db(a, b, 3) < 100.0);
 }
 
-static void enhance_stub_reports_not_implemented() {
-    CHECK(reuse_enhance(nullptr, nullptr, 0, 16000, nullptr) == REUSE_ERR_MODEL);
-    CHECK(std::strcmp(reuse_last_error(), "not implemented") == 0);
+static void enhance_rejects_null_context() {
+    CHECK(reuse_enhance(nullptr, nullptr, 0, 16000, nullptr) == REUSE_ERR_ARG);
+    CHECK(std::strstr(reuse_last_error(), "NULL context") != nullptr);
 }
 
 static void gguf_tests() {
@@ -57,7 +57,7 @@ int main() {
     const T tests[] = {
         {"fixture_reader_reads_manifest", fixture_reader_reads_manifest},
         {"metrics_helpers", metrics_helpers},
-        {"enhance_stub_reports_not_implemented", enhance_stub_reports_not_implemented},
+        {"enhance_rejects_null_context", enhance_rejects_null_context},
         {"gguf_tests", gguf_tests},
     };
     for (const auto & t : tests) {

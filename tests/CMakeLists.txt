@@ -52,3 +52,13 @@ target_link_libraries(test_mamba PRIVATE reuse)
 add_test(NAME mamba COMMAND test_mamba)
 set_tests_properties(mamba PROPERTIES
     ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
+
+# Decoder + end-to-end reuse_enhance tests vs. PyTorch fixtures (need REUSE_GGUF; skip otherwise).
+# On CPU the full model runs at roughly 9 s per second of audio, so this takes a few minutes.
+add_executable(test_enhance test_enhance.cpp)
+target_include_directories(test_enhance PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_enhance PRIVATE reuse)
+add_test(NAME enhance COMMAND test_enhance)
+set_tests_properties(enhance PROPERTIES
+    TIMEOUT 1800
+    ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")

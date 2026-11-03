@@ -17,3 +17,8 @@ struct reuse_ctx {
     BackendHandle backend;  // declared before weights: destroyed after them
     Weights weights;
 };
+
+// reuse_enhance without the exception guard (src/enhance.cpp): validates arguments (returning
+// the status via reuse_fail), runs STFT -> model graph -> zero-frame rule -> iSTFT and writes
+// exactly n samples to out (which may alias in). Throws on internal/backend failure.
+int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);

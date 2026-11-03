@@ -68,6 +68,7 @@ void stft(const float * x, size_t n, StftSizes s, std::vector<float> & mag_log1p
 std::vector<float> istft(const float * mag_log1p, const float * cos_pha, const float * sin_pha,
                          int n_freq, int n_frames, StftSizes s, size_t n_out) {
     if (n_freq != s.n_fft / 2 + 1) throw std::invalid_argument("istft: n_freq does not match n_fft");
+    if (n_frames < 1) throw std::invalid_argument("istft: n_frames must be >= 1");
     const std::vector<double> win = padded_window(s);
     const size_t total = (size_t) s.hop * (size_t) (n_frames - 1) + (size_t) s.n_fft;
     std::vector<double> y(total, 0.0), env(total, 0.0), frame((size_t) s.n_fft);

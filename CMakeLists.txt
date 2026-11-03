@@ -23,7 +23,8 @@ if(NOT TARGET ggml)
 endif()
 
 add_library(reuse STATIC src/reuse.cpp src/convert.cpp src/weights.cpp src/stft.cpp
-    src/graph_encoder.cpp src/graph_mamba.cpp src/graph_run.cpp)
+    src/graph_encoder.cpp src/graph_mamba.cpp src/graph_decoder.cpp src/graph_run.cpp
+    src/enhance.cpp)
 target_include_directories(reuse
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/third_party)

@@ -66,8 +66,10 @@ reuse_ctx * reuse_load(const char * gguf_path, const char * device, int n_thread
     return reuse_guard<reuse_ctx *>(nullptr, REUSE_ERR_MODEL, [&] { return load_impl(gguf_path, device, n_threads); });
 }
 
-int reuse_enhance(reuse_ctx *, const float *, size_t, int, float *) {
-    return reuse_guard<int>(REUSE_ERR_MODEL, REUSE_ERR_MODEL, [&] { return reuse_fail(REUSE_ERR_MODEL, "not implemented"); });
+int reuse_enhance(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out) {
+    // Internal failures here are graph allocation / compute errors on the backend.
+    return reuse_guard<int>(REUSE_ERR_BACKEND, REUSE_ERR_BACKEND,
+                            [&] { return enhance_impl(ctx, in, n, sample_rate, out); });
 }
 
 void reuse_free(reuse_ctx * ctx) {

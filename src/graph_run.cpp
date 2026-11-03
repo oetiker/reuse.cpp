@@ -23,9 +23,11 @@ GraphRun::~GraphRun() {
     if (ctx) ggml_free(ctx);
 }
 
-void GraphRun::alloc(ggml_backend_t be, ggml_tensor * out) {
-    ggml_set_output(out);
-    ggml_build_forward_expand(gf, out);
+void GraphRun::alloc(ggml_backend_t be, const std::vector<ggml_tensor *> & outs) {
+    for (ggml_tensor * out : outs) {
+        ggml_set_output(out);
+        ggml_build_forward_expand(gf, out);
+    }
     for (int i = 0; i < ggml_graph_n_nodes(gf); ++i) {
         ggml_tensor * n = ggml_graph_node(gf, i);
         if (!ggml_backend_supports_op(be, n))
@@ -64,8 +66,16 @@ void GraphRun::compute(ggml_backend_t be) {
         throw std::runtime_error(std::string("graph: compute failed on ") + ggml_backend_name(be));
 }
 
+static ggml_tensor * decoder_tap(const DecoderOut & d, const std::string & tap) {
+    if (tap == "mag_out") return d.mag;
+    if (tap == "pha_r") return d.pha_r;
+    if (tap == "pha_i") return d.pha_i;
+    return nullptr;
+}
+
 // Builds the forward pass from the [F, T, 2] input up to `tap`; nullptr if the tap is unknown.
 static ggml_tensor * build_tap(ggml_context * ctx, const Weights & w, const std::string & tap, ggml_tensor * mag_pha) {
+    if (tap == "mag_out" || tap == "pha_r" || tap == "pha_i") return decoder_tap(forward(ctx, w, mag_pha), tap);
     ggml_tensor * x = encoder(ctx, w, mag_pha);
     if (tap == "enc_out") return x;
     // "block<N>_out": output of TF-Mamba block N (1-based)
@@ -78,6 +88,31 @@ static ggml_tensor * build_tap(ggml_context * ctx, const Weights & w, const std:
     return nullptr;
 }
 
+// Runs a graph with one F32 input `in_data` of shape `in_ne` (3-D) built by `build` and returns
+// the output's data. `what` names the hook in errors.
+template <class Build>
+static std::vector<float> run_one(reuse_ctx * rctx, const char * what, const std::string & tap,
+                                  const std::vector<float> & in_data, const int64_t (&in_ne)[3],
+                                  Build && build, std::vector<int64_t> * ne_out) {
+    ggml_backend_t be = rctx->backend.be;
+    GraphRun g(graph_max_nodes(rctx->weights.hp.num_tfmamba));
+    ggml_tensor * in = ggml_new_tensor_3d(g.ctx, GGML_TYPE_F32, in_ne[0], in_ne[1], in_ne[2]);
+    ggml_set_name(in, "input");
+    ggml_set_input(in);
+    ggml_tensor * out = build(g.ctx, in);
+    if (!out) throw std::runtime_error(std::string(what) + ": unknown tap '" + tap + "'");
+    g.alloc(be, out);
+    ggml_backend_tensor_set(in, in_data.data(), 0, in_data.size() * sizeof(float));
+    g.compute(be);
+
+    if (out->type != GGML_TYPE_F32 || !ggml_is_contiguous(out))
+        throw std::runtime_error(std::string(what) + ": tap '" + tap + "' is not a contiguous F32 tensor");
+    std::vector<float> res((size_t) ggml_nelements(out));
+    ggml_backend_tensor_get(out, res.data(), 0, ggml_nbytes(out));
+    if (ne_out) *ne_out = {out->ne[0], out->ne[1], out->ne[2], out->ne[3]};
+    return res;
+}
+
 std::vector<float> run_tap(reuse_ctx * rctx, const std::string & tap,
                            const std::vector<float> & mag, const std::vector<float> & pha,
                            int n_freq, int n_frames, std::vector<int64_t> * ne_out) {
@@ -85,23 +120,20 @@ std::vector<float> run_tap(reuse_ctx * rctx, const std::string & tap,
     const size_t n = (size_t) n_freq * (size_t) n_frames;
     if (n_freq < 1 || n_frames < 1 || mag.size() != n || pha.size() != n)
         throw std::runtime_error("run_tap: mag/pha size does not match n_freq * n_frames");
-    ggml_backend_t be = rctx->backend.be;
+    std::vector<float> mag_pha(mag);
+    mag_pha.insert(mag_pha.end(), pha.begin(), pha.end());
+    const Weights & w = rctx->weights;
+    return run_one(rctx, "run_tap", tap, mag_pha, {n_freq, n_frames, 2},
+                   [&](ggml_context * ctx, ggml_tensor * in) { return build_tap(ctx, w, tap, in); }, ne_out);
+}
 
-    GraphRun g(graph_max_nodes(rctx->weights.hp.num_tfmamba));
-    ggml_tensor * in = ggml_new_tensor_3d(g.ctx, GGML_TYPE_F32, n_freq, n_frames, 2);
-    ggml_set_name(in, "mag_pha");
-    ggml_set_input(in);
-    ggml_tensor * out = build_tap(g.ctx, rctx->weights, tap, in);
-    if (!out) throw std::runtime_error("run_tap: unknown tap '" + tap + "'");
-    g.alloc(be, out);
-    ggml_backend_tensor_set(in, mag.data(), 0, n * sizeof(float));
-    ggml_backend_tensor_set(in, pha.data(), n * sizeof(float), n * sizeof(float));
-    g.compute(be);
-
-    if (out->type != GGML_TYPE_F32 || !ggml_is_contiguous(out))
-        throw std::runtime_error("run_tap: tap '" + tap + "' is not a contiguous F32 tensor");
-    std::vector<float> res((size_t) ggml_nelements(out));
-    ggml_backend_tensor_get(out, res.data(), 0, ggml_nbytes(out));
-    if (ne_out) *ne_out = {out->ne[0], out->ne[1], out->ne[2], out->ne[3]};
-    return res;
+std::vector<float> run_decoder_tap(reuse_ctx * rctx, const std::string & tap, const std::vector<float> & x,
+                                   int64_t ne0, int64_t ne1, int64_t ne2, std::vector<int64_t> * ne_out) {
+    if (!rctx) throw std::runtime_error("run_decoder_tap: NULL context");
+    if (ne0 < 1 || ne1 < 1 || ne2 < 1 || x.size() != (size_t) (ne0 * ne1 * ne2))
+        throw std::runtime_error("run_decoder_tap: input size does not match its shape");
+    const Weights & w = rctx->weights;
+    return run_one(rctx, "run_decoder_tap", tap, x, {ne0, ne1, ne2},
+                   [&](ggml_context * ctx, ggml_tensor * in) { return decoder_tap(decoders(ctx, w, in), tap); },
+                   ne_out);
 }

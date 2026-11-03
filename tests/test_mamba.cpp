@@ -10,7 +10,7 @@ static void block1_matches_fixture() { check_tap("block1_out", "block1_out", TOL
 
 static void blocks_1_to_30_match_fixture() { check_tap("block30_out", "block30_out", TOL_BLOCK30); }
 
-// The full encoder + all TF-Mamba blocks graph must stay well inside GraphRun's capacity
+// The full model graph (encoder, all TF-Mamba blocks, both decoders) must stay well inside GraphRun's capacity
 // (graph_max_nodes): a ggml context/graph overflow aborts the process. Graph leafs are bounded
 // by the context's own tensors plus all model weights.
 static void graph_fits_node_budget() {
@@ -21,9 +21,10 @@ static void graph_fits_node_budget() {
     CHECK(w.hp.num_tfmamba == 30);
     GraphRun g(graph_max_nodes(w.hp.num_tfmamba));
     ggml_tensor * in = ggml_new_tensor_3d(g.ctx, GGML_TYPE_F32, 481, 201, 2);
-    ggml_tensor * x = encoder(g.ctx, w, in);
-    for (int i = 0; i < w.hp.num_tfmamba; ++i) x = tf_mamba_block(g.ctx, w, i, x);
-    ggml_build_forward_expand(g.gf, x);
+    const DecoderOut d = forward(g.ctx, w, in);
+    ggml_build_forward_expand(g.gf, d.mag);
+    ggml_build_forward_expand(g.gf, d.pha_r);
+    ggml_build_forward_expand(g.gf, d.pha_i);
     size_t n_tensors = 0;
     for (ggml_tensor * t = ggml_get_first_tensor(g.ctx); t; t = ggml_get_next_tensor(g.ctx, t)) ++n_tensors;
     const size_t n_nodes = (size_t) ggml_graph_n_nodes(g.gf);
