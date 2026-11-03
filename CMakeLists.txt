@@ -22,7 +22,7 @@ if(NOT TARGET ggml)
     add_subdirectory(${REUSE_GGML_DIR} ${CMAKE_CURRENT_BINARY_DIR}/ggml)
 endif()
 
-add_library(reuse STATIC src/reuse.cpp src/stft.cpp)
+add_library(reuse STATIC src/reuse.cpp src/convert.cpp src/weights.cpp src/stft.cpp)
 target_include_directories(reuse
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/third_party)

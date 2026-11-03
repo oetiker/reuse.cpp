@@ -39,10 +39,9 @@ static void metrics_helpers() {
     CHECK(snr_db(a, b, 3) < 100.0);
 }
 
-static void stub_reports_not_implemented() {
-    CHECK(reuse_load("x.gguf", nullptr, 1) == nullptr);
+static void enhance_stub_reports_not_implemented() {
+    CHECK(reuse_enhance(nullptr, nullptr, 0, 16000, nullptr) == REUSE_ERR_MODEL);
     CHECK(std::strcmp(reuse_last_error(), "not implemented") == 0);
-    CHECK(reuse_convert("a", "b") == REUSE_ERR_MODEL);
 }
 
 static void gguf_tests() {
@@ -58,7 +57,7 @@ int main() {
     const T tests[] = {
         {"fixture_reader_reads_manifest", fixture_reader_reads_manifest},
         {"metrics_helpers", metrics_helpers},
-        {"stub_reports_not_implemented", stub_reports_not_implemented},
+        {"enhance_stub_reports_not_implemented", enhance_stub_reports_not_implemented},
         {"gguf_tests", gguf_tests},
     };
     for (const auto & t : tests) {

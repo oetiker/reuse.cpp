@@ -28,3 +28,11 @@ target_link_libraries(test_stft PRIVATE reuse)
 add_test(NAME stft COMMAND test_stft)
 set_tests_properties(stft PROPERTIES
     ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
+
+# Converter / loader tests (need REUSE_SAFETENSORS; skip otherwise). GGUFs are written to the build dir.
+add_executable(test_weights test_weights.cpp)
+target_include_directories(test_weights PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_weights PRIVATE reuse)
+add_test(NAME weights COMMAND test_weights)
+set_tests_properties(weights PROPERTIES
+    ENVIRONMENT "REUSE_TEST_TMP=${CMAKE_CURRENT_BINARY_DIR}")
