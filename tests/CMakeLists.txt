@@ -20,3 +20,11 @@ add_test(NAME no_second_ggml
         -DPARENT_BIN=${PROJECT_SOURCE_DIR}/build-parent
         -DGGML_DIR=${REUSE_GGML_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/no_second_ggml.cmake)
+
+# STFT/iSTFT tests (select with ctest -R stft)
+add_executable(test_stft test_stft.cpp)
+target_include_directories(test_stft PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_stft PRIVATE reuse)
+add_test(NAME stft COMMAND test_stft)
+set_tests_properties(stft PROPERTIES
+    ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
