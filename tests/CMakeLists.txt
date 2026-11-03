@@ -36,3 +36,11 @@ target_link_libraries(test_weights PRIVATE reuse)
 add_test(NAME weights COMMAND test_weights)
 set_tests_properties(weights PROPERTIES
     ENVIRONMENT "REUSE_TEST_TMP=${CMAKE_CURRENT_BINARY_DIR}")
+
+# Graph tap tests vs. PyTorch fixtures (need REUSE_GGUF; skip otherwise; REUSE_DEVICE picks the device).
+add_executable(test_encoder test_encoder.cpp)
+target_include_directories(test_encoder PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_encoder PRIVATE reuse)
+add_test(NAME encoder COMMAND test_encoder)
+set_tests_properties(encoder PROPERTIES
+    ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
