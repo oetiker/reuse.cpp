@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <functional>
 #include <string>
@@ -78,6 +79,32 @@ static void convert_refuses_wrong_file() {
     std::remove(trunc.c_str());
 }
 
+// A file with a valid header followed by a huge sparse data section makes the converter's
+// data allocation throw std::bad_alloc; the C API must turn that into an error status.
+static void convert_contains_exceptions() {
+    if (!safetensors()) { std::printf("  SKIP: REUSE_SAFETENSORS not set\n"); return; }
+    const std::string huge = temp_dir() + "/huge_sparse.safetensors";
+    {
+        std::ifstream in(safetensors(), std::ios::binary);
+        unsigned char lb[8];
+        in.read(reinterpret_cast<char *>(lb), 8);
+        uint64_t hlen = 0;
+        for (int i = 7; i >= 0; --i) hlen = (hlen << 8) | lb[i];
+        std::vector<char> pre(8 + hlen);
+        in.seekg(0);
+        in.read(pre.data(), (std::streamsize) pre.size());
+        std::ofstream o(huge, std::ios::binary);
+        o.write(pre.data(), (std::streamsize) pre.size());
+    }
+    std::error_code ec;
+    std::filesystem::resize_file(huge, std::uintmax_t(1) << 60, ec);  // exceeds the address space, sparse
+    if (ec) { std::printf("  SKIP: cannot create sparse file\n"); std::remove(huge.c_str()); return; }
+    const int rc = reuse_convert(huge.c_str(), (temp_dir() + "/huge_out.gguf").c_str());
+    CHECK(rc != REUSE_OK);
+    CHECK(std::string(reuse_last_error()).find("internal error") != std::string::npos);
+    std::remove(huge.c_str());
+}
+
 static void load_on_cpu() {
     if (!safetensors()) { std::printf("  SKIP: REUSE_SAFETENSORS not set\n"); return; }
     const std::string gguf = converted();
@@ -140,6 +167,7 @@ int main() {
     const T tests[] = {
         {"convert_writes_all_tensors", convert_writes_all_tensors},
         {"convert_refuses_wrong_file", convert_refuses_wrong_file},
+        {"convert_contains_exceptions", convert_contains_exceptions},
         {"load_on_cpu", load_on_cpu},
         {"weights_values_and_derived_a", weights_values_and_derived_a},
     };

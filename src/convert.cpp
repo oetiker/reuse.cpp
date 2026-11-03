@@ -185,7 +185,7 @@ using FilePtr = std::unique_ptr<FILE, FileCloser>;
 
 } // namespace
 
-extern "C" int reuse_convert(const char * st_path, const char * out_path) {
+static int convert_impl(const char * st_path, const char * out_path) {
     if (!st_path || !out_path) return reuse_fail(REUSE_ERR_ARG, "reuse_convert: NULL path");
     const std::string src(st_path), dst(out_path);
 
@@ -291,4 +291,8 @@ extern "C" int reuse_convert(const char * st_path, const char * out_path) {
     if (!gguf_write_to_file(g, out_path, false))
         return reuse_fail(REUSE_ERR_MODEL, dst + ": cannot write GGUF file");
     return REUSE_OK;
+}
+
+extern "C" int reuse_convert(const char * st_path, const char * out_path) {
+    return reuse_guard<int>(REUSE_ERR_MODEL, REUSE_ERR_MODEL, [&] { return convert_impl(st_path, out_path); });
 }

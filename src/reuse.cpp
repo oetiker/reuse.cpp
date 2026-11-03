@@ -23,9 +23,7 @@ static ggml_backend_dev_t find_device(const std::string & name) {
     return ggml_backend_dev_by_name(name.c_str());
 }
 
-extern "C" {
-
-reuse_ctx * reuse_load(const char * gguf_path, const char * device, int n_threads) {
+static reuse_ctx * load_impl(const char * gguf_path, const char * device, int n_threads) {
     if (!gguf_path) { reuse_fail(REUSE_ERR_ARG, "reuse_load: NULL gguf path"); return nullptr; }
     if (n_threads < 1) { reuse_fail(REUSE_ERR_ARG, "reuse_load: n_threads must be >= 1"); return nullptr; }
 
@@ -62,12 +60,18 @@ reuse_ctx * reuse_load(const char * gguf_path, const char * device, int n_thread
     return ctx.release();
 }
 
+extern "C" {
+
+reuse_ctx * reuse_load(const char * gguf_path, const char * device, int n_threads) {
+    return reuse_guard<reuse_ctx *>(nullptr, REUSE_ERR_MODEL, [&] { return load_impl(gguf_path, device, n_threads); });
+}
+
 int reuse_enhance(reuse_ctx *, const float *, size_t, int, float *) {
-    return reuse_fail(REUSE_ERR_MODEL, "not implemented");
+    return reuse_guard<int>(REUSE_ERR_MODEL, REUSE_ERR_MODEL, [&] { return reuse_fail(REUSE_ERR_MODEL, "not implemented"); });
 }
 
 void reuse_free(reuse_ctx * ctx) {
-    delete ctx;
+    reuse_guard<int>(0, REUSE_ERR_MODEL, [&] { delete ctx; return 0; });
 }
 
 const char * reuse_last_error(void) {
