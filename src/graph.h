@@ -25,6 +25,12 @@ inline ggml_tensor * wt(const Weights & w, const std::string & name) {
     return const_cast<ggml_tensor *>(w.get(name));
 }
 
+// ggml_conv_2d_direct (ggml dim order: s0/p0/d0 along dim 0) with F32 accumulation requested
+// ([TAG_GGML_PREC]). Without it ggml Vulkan on coopmat devices runs the conv through its cm1/cm2
+// shaders, which stage both operands and accumulate in float16 (~5e-3 relative error at enc_out).
+ggml_tensor * conv_2d_f32(ggml_context * ctx, ggml_tensor * kernel, ggml_tensor * x,
+                          int s0, int s1, int p0, int p1, int d0, int d1);
+
 // torch.nn.Conv2d with bias on x [F, T, IC, 1]; kernel/stride/padding/dilation are given in
 // torch order (time, freq). `prefix` names the conv module ("<prefix>.weight", "<prefix>.bias").
 ggml_tensor * conv2d(ggml_context * ctx, const Weights & w, const std::string & prefix, ggml_tensor * x,

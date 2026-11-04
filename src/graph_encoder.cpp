@@ -8,11 +8,18 @@ static ggml_tensor * per_channel(ggml_context * ctx, const ggml_tensor * v) {
     return ggml_reshape_4d(ctx, const_cast<ggml_tensor *>(v), 1, 1, v->ne[0], 1);
 }
 
+ggml_tensor * conv_2d_f32(ggml_context * ctx, ggml_tensor * kernel, ggml_tensor * x,
+                          int s0, int s1, int p0, int p1, int d0, int d1) {
+    ggml_tensor * y = ggml_conv_2d_direct(ctx, kernel, x, s0, s1, p0, p1, d0, d1);
+    ggml_prec_set_acc(y, GGML_PREC_F32);
+    return y;
+}
+
 ggml_tensor * conv2d(ggml_context * ctx, const Weights & w, const std::string & prefix, ggml_tensor * x,
                      int stride_t, int stride_f, int pad_t, int pad_f, int dil_t, int dil_f) {
     // ggml dim 0 = frequency (torch kw), dim 1 = time (torch kh).
-    ggml_tensor * y = ggml_conv_2d_direct(ctx, wt(w, prefix + ".weight"), x,
-                                          stride_f, stride_t, pad_f, pad_t, dil_f, dil_t);
+    ggml_tensor * y = conv_2d_f32(ctx, wt(w, prefix + ".weight"), x,
+                                  stride_f, stride_t, pad_f, pad_t, dil_f, dil_t);
     return ggml_add(ctx, y, per_channel(ctx, w.get(prefix + ".bias")));
 }
 

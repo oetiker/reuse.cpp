@@ -18,7 +18,7 @@ static ggml_tensor * up_conv(ggml_context * ctx, const Weights & w, const std::s
     const std::string cp = prefix + ".0.conv";
     ggml_tensor * k = wt(w, cp + ".weight");  // {3, 1, C, C*r}
     if (along_time) k = ggml_reshape_4d(ctx, k, 1, 3, k->ne[2], k->ne[3]);
-    ggml_tensor * y = ggml_conv_2d_direct(ctx, k, x, 1, 1, along_time ? 0 : 1, along_time ? 1 : 0, 1, 1);
+    ggml_tensor * y = conv_2d_f32(ctx, k, x, 1, 1, along_time ? 0 : 1, along_time ? 1 : 0, 1, 1);
     const ggml_tensor * bias = w.get(cp + ".bias");
     y = ggml_add(ctx, y, ggml_reshape_4d(ctx, const_cast<ggml_tensor *>(bias), 1, 1, bias->ne[0], 1));
 
