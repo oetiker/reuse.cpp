@@ -12,6 +12,7 @@ else()
 endif()
 
 option(REUSE_BUILD_TESTS "Build reuse.cpp tests" ${REUSE_TOPLEVEL})
+option(REUSE_BUILD_TOOLS "Build reuse.cpp tools (reuse-bench)" ${REUSE_TOPLEVEL})
 set(REUSE_GGML_DIR "" CACHE PATH "Path to llama.cpp/ggml (used only when no ggml target exists)")
 
 # Reuse the parent's ggml when embedded; otherwise build our own.
@@ -33,4 +34,10 @@ target_link_libraries(reuse PUBLIC ggml)
 if(REUSE_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+if(REUSE_BUILD_TOOLS)
+    add_executable(reuse-bench tools/bench.cpp)
+    target_include_directories(reuse-bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(reuse-bench PRIVATE reuse)
 endif()

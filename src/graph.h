@@ -112,6 +112,8 @@ struct GraphRun {
     void alloc(ggml_backend_t be, ggml_tensor * out) { alloc(be, std::vector<ggml_tensor *>{out}); }
     void alloc(ggml_backend_t be, const std::vector<ggml_tensor *> & outs);
     void compute(ggml_backend_t be);
+    // Size of the backend compute buffer allocated by alloc() (0 before).
+    size_t compute_bytes() const { return galloc_ ? ggml_gallocr_get_buffer_size(galloc_, 0) : 0; }
 
     ggml_context * ctx = nullptr;
     ggml_cgraph * gf = nullptr;

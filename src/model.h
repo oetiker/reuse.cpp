@@ -16,6 +16,7 @@ struct reuse_ctx {
     int n_threads = 1;
     BackendHandle backend;  // declared before weights: destroyed after them
     Weights weights;
+    size_t last_compute_bytes = 0;  // compute buffer size of the last reuse_enhance graph (reuse-bench)
 };
 
 // reuse_enhance without the exception guard (src/enhance.cpp): validates arguments (returning

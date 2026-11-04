@@ -60,6 +60,7 @@ int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, f
     ggml_set_input(x);
     const DecoderOut d = forward(g.ctx, ctx->weights, x);
     g.alloc(be, {d.mag, d.pha_r, d.pha_i});  // also uploads the graph constants
+    ctx->last_compute_bytes = g.compute_bytes();
     ggml_backend_tensor_set(x, mag.data(), 0, nft * sizeof(float));
     ggml_backend_tensor_set(x, pha.data(), nft * sizeof(float), nft * sizeof(float));
     g.compute(be);
