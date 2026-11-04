@@ -34,6 +34,26 @@ Notes:
   half precision and 44.1 kHz input overflows to inf/NaN.
 - Numerical parity on CPU and MTL0 is in `tests/TOLERANCES.md`.
 
-## AMD (ROCm / Vulkan), CUDA
+## AMD Ryzen AI Max (Strix Halo, Radeon 8060S gfx1151), 2026-11-04
 
-Not measured yet.
+Same 10.74 s, 24 kHz clip; single pass; compute buffer 2799 MiB on every device.
+
+| Device | Enhance time | RTF |
+|---|---:|---:|
+| Vulkan0 (RADV) | 3.49 s | 3.08 |
+| ROCm0 (HIP) | 7.25 s | 1.48 |
+| CPU, 16 threads | 37.9 s | 0.28 |
+
+Notes:
+
+- HIP needs `GGML_CUDA_ENABLE_UNIFIED_MEMORY=1` on this APU.
+- Vulkan needs the fork's Mamba-1 `ssm_scan` shader and F32 accumulation on
+  CONV_2D (`ggml_prec_set_acc`): with KHR_coopmat, the matrix-core conv2d path
+  stages and accumulates in float16, which put the encoder off by ~5e-3.
+- Parity with the CPU reference on both: about 1e-7 relative at the encoder,
+  2e-6 after 30 blocks, end-to-end SNR the same as CPU.
+
+## CUDA
+
+Builds (compile only): CUDA 12.4, `-DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86`,
+against the fork at 39a4947. Not run: no NVIDIA GPU available.
