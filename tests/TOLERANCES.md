@@ -59,3 +59,18 @@ count matches.
 Silence (24000 zeros, 24 kHz): PyTorch gives max |y| = 0.04242 (the model predicts positive
 log magnitudes in nearly every bin, so the zero-frame rule never fires); the port gives
 0.0429. The test requires finite output within 0.004 of the PyTorch level.
+
+## Windowed enhance (tests/test_window.cpp)
+
+`windowed_keeps_length_and_is_close`: tobi-4s-24k with window 2 s / overlap 0.5 s (3 windows of
+40000 samples at 24 kHz) vs. the single-pass output of the same ctx: **18.7 dB** SNR (CPU, 4
+threads); `SNR_WINDOWED_MIN` = 15 dB. The error is spread evenly over the clip (per 0.25 s block
+14-23 dB, blocks next to a seam are no worse than the rest), i.e. it is the model seeing a
+2 s context instead of 4 s (InstanceNorm statistics, bidirectional Mamba), not a seam artefact;
+with the production 20 s / 2 s windows the context differs far less. A hard cut instead of the
+crossfade measures 18.3 dB, so this number says little about the crossfade itself; that is
+verified deterministically by `crossfade_reconstructs_signal` (equal signals add up to
+themselves, different signals are joined with steps <= pi/overlap; a hard cut gives a step of 2).
+`windowed_has_no_seam_jump`: |diff| at the seam centres 0.027 / 0.018 vs. p99 over the clip
+0.081 (limit 5x); weak check, see the comment in the test.
+`short_input_unchanged` is bit-exact (memcmp against `enhance_window`).

@@ -62,3 +62,13 @@ add_test(NAME enhance COMMAND test_enhance)
 set_tests_properties(enhance PROPERTIES
     TIMEOUT 1800
     ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")
+
+# Windowed reuse_enhance (long inputs); window lengths overridden through reuse_ctx so short
+# fixtures exercise it. Needs REUSE_GGUF for the model tests; the plan test runs without.
+add_executable(test_window test_window.cpp)
+target_include_directories(test_window PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test_window PRIVATE reuse)
+add_test(NAME window COMMAND test_window)
+set_tests_properties(window PROPERTIES
+    TIMEOUT 1800
+    ENVIRONMENT "REUSE_FIXTURES_DEFAULT=${REUSE_FIXTURES_DIR}")

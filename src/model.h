@@ -16,10 +16,18 @@ struct reuse_ctx {
     int n_threads = 1;
     BackendHandle backend;  // declared before weights: destroyed after them
     Weights weights;
-    size_t last_compute_bytes = 0;  // compute buffer size of the last reuse_enhance graph (reuse-bench)
+    size_t last_compute_bytes = 0;  // largest compute buffer of the last reuse_enhance's graphs (reuse-bench)
+    // Windowing of long inputs (src/window.h). Internal: tests shrink these; not part of the C API.
+    double window_seconds = 20.0;   // inputs up to this long run as one graph
+    double overlap_seconds = 2.0;   // crossfade length between consecutive windows
+    int last_window_count = 0;      // windows used by the last reuse_enhance
 };
 
 // reuse_enhance without the exception guard (src/enhance.cpp): validates arguments (returning
 // the status via reuse_fail), runs STFT -> model graph -> zero-frame rule -> iSTFT and writes
 // exactly n samples to out (which may alias in). Throws on internal/backend failure.
+// Single-window path (no windowing): the former whole-clip enhance_impl. Argument validation is
+// the caller's job. Raises ctx->last_compute_bytes to this graph's size if larger.
+void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);
+
 int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);

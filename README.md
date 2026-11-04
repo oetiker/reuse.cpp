@@ -27,6 +27,16 @@ containing `tools/nvidia/*` plus `model.safetensors`:
 
 `run.py` finds the `mamba_ssm` stand-in next to itself (do not use `python -I`).
 
+## Long inputs
+
+`reuse_enhance` runs the model as one graph, and compute memory grows linearly with the clip
+(about 2.6 GB per 10 s at 24 kHz). Inputs up to 20 s are processed in one pass. Longer inputs are
+split into overlapping windows (at most 20 s each, 2 s overlap, evenly distributed so there is
+no tiny last window), each window is enhanced on its own and the overlaps are joined with a
+raised-cosine crossfade. Peak memory is thus that of one window for any input length. The result
+differs slightly from a single-pass run near the seams (InstanceNorm and the bidirectional Mamba
+see one window at a time). `reuse-bench` reports the largest compute buffer over all windows.
+
 ## Licence
 
 OpenMDW-1.1, see `LICENSE` and `NOTICE`. Not affiliated with NVIDIA.
