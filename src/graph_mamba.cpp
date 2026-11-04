@@ -37,6 +37,17 @@ ggml_tensor * const_rev_i32(ggml_context * ctx, int64_t L, int64_t n) {
 
 // ---- Mamba -------------------------------------------------------------------------------
 
+// ggml_mul_mat with src1 kept in F32 and F32 accumulation ([TAG_GGML_PREC]). Without the src1
+// flag a backend may stage F32 x F32 products in half precision (ggml Metal kernel_mul_mm_f32_f32
+// does): ~5e-4 relative error per product and inf once an activation exceeds 65504, which the
+// TF-Mamba residual stream does at 44.1 kHz (|x| ~ 1e5 by block 7).
+static ggml_tensor * mul_mat_f32(ggml_context * ctx, ggml_tensor * a, ggml_tensor * b) {
+    ggml_tensor * y = ggml_mul_mat(ctx, a, b);
+    ggml_prec_set_acc(y, GGML_PREC_F32);
+    ggml_prec_set_src(y, GGML_PREC_F32, 1);
+    return y;
+}
+
 // Reverses dimension 1 (the token axis) of u [D, L, n].
 static ggml_tensor * flip_tokens(ggml_context * ctx, ggml_tensor * u) {
     return ggml_get_rows(ctx, u, const_rev_i32(ctx, u->ne[1], u->ne[2]));
@@ -53,7 +64,7 @@ static ggml_tensor * mamba(ggml_context * ctx, const Weights & w, const std::str
     const int64_t dt_rank = w.get(p + ".dt_proj.weight")->ne[0];
 
     // in_proj (no bias) -> x, z = chunk(2) along channels
-    ggml_tensor * xz = ggml_mul_mat(ctx, wt(w, p + ".in_proj.weight"), u);  // [2*d_inner, L, n_seq]
+    ggml_tensor * xz = mul_mat_f32(ctx, wt(w, p + ".in_proj.weight"), u);  // [2*d_inner, L, n_seq]
     ggml_tensor * x = ggml_view_3d(ctx, xz, d_inner, L, n_seq, xz->nb[1], xz->nb[2], 0);
     ggml_tensor * z = ggml_view_3d(ctx, xz, d_inner, L, n_seq, xz->nb[1], xz->nb[2],
                                    d_inner * ggml_element_size(xz));
@@ -65,7 +76,7 @@ static ggml_tensor * mamba(ggml_context * ctx, const Weights & w, const std::str
     x = ggml_silu(ctx, ggml_add(ctx, x, wt(w, p + ".conv1d.bias")));
 
     // x_proj -> dt (dt_rank), B (d_state), C (d_state)
-    ggml_tensor * xdb = ggml_mul_mat(ctx, wt(w, p + ".x_proj.weight"), x);  // [dt_rank+2*d_state, L, n_seq]
+    ggml_tensor * xdb = mul_mat_f32(ctx, wt(w, p + ".x_proj.weight"), x);  // [dt_rank+2*d_state, L, n_seq]
     const size_t es = ggml_element_size(xdb);
     ggml_tensor * dt = ggml_view_3d(ctx, xdb, dt_rank, L, n_seq, xdb->nb[1], xdb->nb[2], 0);
     ggml_tensor * B = ggml_view_4d(ctx, xdb, d_state, 1, L, n_seq, d_state * es, xdb->nb[1], xdb->nb[2],
@@ -75,7 +86,7 @@ static ggml_tensor * mamba(ggml_context * ctx, const Weights & w, const std::str
 
     // dt_proj weight, then + dt_proj.bias; softplus is applied inside ggml_ssm_scan (as in
     // selective_scan_ref: softplus(dt + delta_bias)), so it must not be applied here.
-    dt = ggml_mul_mat(ctx, wt(w, p + ".dt_proj.weight"), dt);  // [d_inner, L, n_seq]
+    dt = mul_mat_f32(ctx, wt(w, p + ".dt_proj.weight"), dt);  // [d_inner, L, n_seq]
     dt = ggml_add(ctx, dt, wt(w, p + ".dt_proj.bias"));
 
     // Mamba-1 scan: head_dim 1, n_head d_inner, n_group 1, zero initial state for every sequence.
@@ -90,7 +101,7 @@ static ggml_tensor * mamba(ggml_context * ctx, const Weights & w, const std::str
     // + u * D, gate with silu(z), out_proj (no bias)
     y = ggml_add(ctx, y, ggml_mul(ctx, x, wt(w, p + ".D")));
     y = ggml_mul(ctx, y, ggml_silu(ctx, ggml_cont(ctx, z)));
-    return ggml_mul_mat(ctx, wt(w, p + ".out_proj.weight"), y);  // [d_model, L, n_seq]
+    return mul_mat_f32(ctx, wt(w, p + ".out_proj.weight"), y);  // [d_model, L, n_seq]
 }
 
 // MambaBlock (mamba_block2_SEMamba.py) on u [D, L, n_seq]: forward Mamba + residual, backward
@@ -102,7 +113,7 @@ static ggml_tensor * mamba_block(ggml_context * ctx, const Weights & w, const st
     ggml_tensor * bw = ggml_add(ctx, mamba(ctx, w, p + ".backward_blocks", ur), ur);
     bw = flip_tokens(ctx, bw);
     ggml_tensor * y = ggml_concat(ctx, fw, bw, 0);  // [2D, L, n_seq]
-    y = ggml_mul_mat(ctx, wt(w, p + ".output_proj.weight"), y);
+    y = mul_mat_f32(ctx, wt(w, p + ".output_proj.weight"), y);
     y = ggml_add(ctx, y, wt(w, p + ".output_proj.bias"));
     y = ggml_norm(ctx, y, 1e-5f);
     y = ggml_mul(ctx, y, wt(w, p + ".norm.weight"));
