@@ -72,6 +72,12 @@ int reuse_enhance(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, 
                             [&] { return enhance_impl(ctx, in, n, sample_rate, out); });
 }
 
+void reuse_set_progress(reuse_ctx * ctx, reuse_progress_fn fn, void * user) {
+    if (!ctx) return;
+    ctx->progress_fn = fn;
+    ctx->progress_user = user;
+}
+
 void reuse_free(reuse_ctx * ctx) {
     reuse_guard<int>(0, REUSE_ERR_MODEL, [&] { delete ctx; return 0; });
 }

@@ -30,6 +30,10 @@ target_include_directories(reuse
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 target_link_libraries(reuse PUBLIC ggml)
+# graph_run.cpp slices a graph with ggml_graph_view, which ggml declares only in the private
+# ggml-impl.h (ggml/src); the ggml target's source dir is that directory.
+get_target_property(REUSE_GGML_SRC_DIR ggml SOURCE_DIR)
+target_include_directories(reuse PRIVATE ${REUSE_GGML_SRC_DIR})
 
 if(REUSE_BUILD_TESTS)
     enable_testing()

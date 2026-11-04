@@ -31,7 +31,8 @@ std::vector<float> read_cropped(ggml_tensor * t, int F, int T) {
 
 }  // namespace
 
-void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out) {
+void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out,
+                    double p0, double p1) {
     const StftSizes s = stft_sizes(sample_rate);
     // STFT (log1p magnitude, phase), [F, T] frequency innermost.
     std::vector<float> mag, pha;
@@ -50,7 +51,13 @@ void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate
     ctx->last_compute_bytes = std::max(ctx->last_compute_bytes, g.compute_bytes());
     ggml_backend_tensor_set(x, mag.data(), 0, nft * sizeof(float));
     ggml_backend_tensor_set(x, pha.data(), nft * sizeof(float), nft * sizeof(float));
-    g.compute(be);
+    if (ctx->progress_fn) {
+        reuse_progress_fn fn = ctx->progress_fn;
+        void * user = ctx->progress_user;
+        g.compute_sliced(be, 32, [&](double f) { fn((float) (p0 + (p1 - p0) * f), user); });
+    } else {
+        g.compute(be);
+    }
 
     std::vector<float> amp = read_cropped(d.mag, F, T);
     const std::vector<float> re = read_cropped(d.pha_r, F, T);
@@ -98,6 +105,7 @@ int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, f
     if (n <= window) {
         ctx->last_window_count = 1;
         enhance_window(ctx, in, n, sample_rate, out);
+        if (ctx->progress_fn) ctx->progress_fn(1.0f, ctx->progress_user);
         return REUSE_OK;
     }
 
@@ -111,9 +119,11 @@ int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, f
     for (size_t i = 0; i < plan.size(); ++i) {
         const Window & w = plan[i];
         y.resize(w.len);
-        enhance_window(ctx, in + w.start, w.len, sample_rate, y.data());
+        enhance_window(ctx, in + w.start, w.len, sample_rate, y.data(), (double) i / plan.size(),
+                       (double) (i + 1) / plan.size());
         accumulate_window(acc.data(), y.data(), w, i > 0, i + 1 < plan.size(), overlap);
     }
     std::memcpy(out, acc.data(), n * sizeof(float));
+    if (ctx->progress_fn) ctx->progress_fn(1.0f, ctx->progress_user);
     return REUSE_OK;
 }

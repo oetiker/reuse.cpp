@@ -1,5 +1,6 @@
 #pragma once
 // Model definition (hyperparameters, weights, graph) lives here; filled in by later tasks.
+#include "reuse.h"
 #include "weights.h"
 
 #include <string>
@@ -20,6 +21,8 @@ struct reuse_ctx {
     // Windowing of long inputs (src/window.h). Internal: tests shrink these; not part of the C API.
     double window_seconds = 20.0;   // inputs up to this long run as one graph
     double overlap_seconds = 2.0;   // crossfade length between consecutive windows
+    reuse_progress_fn progress_fn = nullptr;  // reuse_set_progress
+    void * progress_user = nullptr;
     int last_window_count = 0;      // windows used by the last reuse_enhance
 };
 
@@ -28,6 +31,9 @@ struct reuse_ctx {
 // exactly n samples to out (which may alias in). Throws on internal/backend failure.
 // Single-window path (no windowing): the former whole-clip enhance_impl. Argument validation is
 // the caller's job. Raises ctx->last_compute_bytes to this graph's size if larger.
-void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);
+// With a progress callback set, the graph runs in slices and reports the fraction
+// p0 + (p1 - p0) * slice_fraction.
+void enhance_window(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out,
+                    double p0 = 0.0, double p1 = 1.0);
 
 int enhance_impl(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);

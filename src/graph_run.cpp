@@ -1,7 +1,9 @@
 // Graph execution on the context's backend and the run_tap test hook (see graph.h).
 #include "graph.h"
 #include "model.h"
+#include "ggml-impl.h"  // ggml_graph_view (not in the public headers)
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
@@ -64,6 +66,18 @@ void GraphRun::upload_consts() {
 void GraphRun::compute(ggml_backend_t be) {
     if (ggml_backend_graph_compute(be, gf) != GGML_STATUS_SUCCESS)
         throw std::runtime_error(std::string("graph: compute failed on ") + ggml_backend_name(be));
+}
+
+void GraphRun::compute_sliced(ggml_backend_t be, int slices, const std::function<void(double)> & on_slice) {
+    const int n = ggml_graph_n_nodes(gf);
+    slices = std::max(1, std::min(slices, n));
+    for (int k = 0; k < slices; ++k) {
+        const int i0 = (int) ((int64_t) n * k / slices), i1 = (int) ((int64_t) n * (k + 1) / slices);
+        ggml_cgraph view = ggml_graph_view(gf, i0, i1);
+        if (ggml_backend_graph_compute(be, &view) != GGML_STATUS_SUCCESS)
+            throw std::runtime_error(std::string("graph: compute failed on ") + ggml_backend_name(be));
+        on_slice((double) (k + 1) / slices);
+    }
 }
 
 static ggml_tensor * decoder_tap(const DecoderOut & d, const std::string & tap) {

@@ -152,6 +152,102 @@ static void silence_stays_finite_at_reference_level() {
     CHECK(std::fabs(peak - 0.04242) < 0.004);
 }
 
+// ---- progress callback ----
+struct ProgressLog { std::vector<float> v; };
+static void progress_cb(float f, void * user) { static_cast<ProgressLog *>(user)->v.push_back(f); }
+
+struct ProgressWindowOverride {  // shrinks windowing so a 4 s clip runs as several windows
+    reuse_ctx * c;
+    ProgressWindowOverride(reuse_ctx * ctx, double w, double o) : c(ctx) { c->window_seconds = w; c->overlap_seconds = o; }
+    ~ProgressWindowOverride() { c->window_seconds = 20.0; c->overlap_seconds = 2.0; }
+};
+
+static bool monotonic_to_one(const std::vector<float> & v) {
+    if (v.empty() || v.back() != 1.0f) return false;
+    float prev = 0.f;
+    for (float f : v) { if (f < prev || f < 0.f || f > 1.f) return false; prev = f; }
+    return true;
+}
+
+static void progress_reports_monotonic_to_one() {
+    NEED_MODEL();
+    for (const char * name : {"tobi-4s-24k", "petra-4s-24k"}) {
+        auto fx = load_fixture(fixtures_dir() + "/" + name);
+        auto meta = load_meta(fixtures_dir() + "/" + name);
+        const Tensor & in = fx.at("input");
+        std::vector<float> out(in.data.size());
+        ProgressLog log;
+        reuse_set_progress(ctx, progress_cb, &log);
+        CHECK(reuse_enhance(ctx, in.data.data(), in.data.size(), meta.at("sample_rate"), out.data()) == REUSE_OK);
+        reuse_set_progress(ctx, nullptr, nullptr);
+        std::printf("  %s [%s]: %zu progress calls\n", name, device(), log.v.size());
+        CHECK(log.v.size() >= 10);
+        CHECK(monotonic_to_one(log.v));
+    }
+    // windowed: progress spans all windows
+    ProgressWindowOverride ov(ctx, 2.0, 0.5);
+    auto fx = load_fixture(fixtures_dir() + "/tobi-4s-24k");
+    const Tensor & in = fx.at("input");
+    std::vector<float> out(in.data.size());
+    ProgressLog log;
+    reuse_set_progress(ctx, progress_cb, &log);
+    CHECK(reuse_enhance(ctx, in.data.data(), in.data.size(), 24000, out.data()) == REUSE_OK);
+    reuse_set_progress(ctx, nullptr, nullptr);
+    std::printf("  windowed (%d windows): %zu progress calls\n", ctx->last_window_count, log.v.size());
+    CHECK(ctx->last_window_count > 1);
+    CHECK(log.v.size() >= 10 * (size_t) ctx->last_window_count);
+    CHECK(monotonic_to_one(log.v));
+}
+
+// With a callback the graph runs in node slices. Backends that fuse or reorder across the whole
+// graph (Metal) may round differently at slice boundaries, so bit-identity is required on CPU
+// only; elsewhere the result must agree with the unsliced run to within 100 dB SNR.
+static void progress_does_not_change_output() {
+    NEED_MODEL();
+    const bool bit_exact = std::strcmp(device(), "CPU") == 0;
+    for (int windowed = 0; windowed < 2; ++windowed) {
+        for (const char * name : {"tobi-4s-24k", "petra-4s-24k"}) {
+            auto fx = load_fixture(fixtures_dir() + "/" + name);
+            const Tensor & in = fx.at("input");
+            const size_t n = in.data.size();
+            std::vector<float> a(n), c(n), b(n);
+            ProgressLog log;
+            ProgressWindowOverride ov(ctx, windowed ? 2.0 : 20.0, windowed ? 0.5 : 2.0);
+            CHECK(reuse_enhance(ctx, in.data.data(), n, 24000, a.data()) == REUSE_OK);
+            auto t0 = std::chrono::steady_clock::now();
+            CHECK(reuse_enhance(ctx, in.data.data(), n, 24000, c.data()) == REUSE_OK);  // determinism control
+            const double t_plain = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            reuse_set_progress(ctx, progress_cb, &log);
+            t0 = std::chrono::steady_clock::now();
+            CHECK(reuse_enhance(ctx, in.data.data(), n, 24000, b.data()) == REUSE_OK);
+            const double t_sliced = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            std::printf("  timing: plain %.2f s, sliced %.2f s\n", t_plain, t_sliced);
+            reuse_set_progress(ctx, nullptr, nullptr);
+            const bool ctl = std::memcmp(a.data(), c.data(), n * sizeof(float)) == 0;
+            const bool same = std::memcmp(a.data(), b.data(), n * sizeof(float)) == 0;
+            const double snr = snr_db(a.data(), b.data(), n);
+            std::printf("  %s %s [%s]: control identical=%d, sliced identical=%d, snr %.1f dB, max_abs_diff %.3g (%zu calls)\n",
+                        name, windowed ? "windowed" : "single", device(), (int) ctl, (int) same, snr,
+                        max_abs_diff(a.data(), b.data(), n), log.v.size());
+            CHECK(!log.v.empty());
+            if (bit_exact) CHECK(same); else CHECK(snr > 100.0);
+        }
+    }
+}
+
+static void null_progress_callback_is_silent() {
+    NEED_MODEL();
+    auto fx = load_fixture(fixtures_dir() + "/tobi-4s-24k");
+    const Tensor & in = fx.at("input");
+    std::vector<float> out(in.data.size());
+    ProgressLog log;
+    reuse_set_progress(ctx, progress_cb, &log);
+    reuse_set_progress(ctx, nullptr, &log);
+    CHECK(reuse_enhance(ctx, in.data.data(), in.data.size(), 24000, out.data()) == REUSE_OK);
+    CHECK(log.v.empty());
+    reuse_set_progress(nullptr, progress_cb, &log);  // NULL ctx must not crash
+}
+
 int main() {
     const TapTest tests[] = {
         {"bad_arguments_are_refused", bad_arguments_are_refused},
@@ -160,6 +256,9 @@ int main() {
         {"silence_stays_finite_at_reference_level", silence_stays_finite_at_reference_level},
         {"enhance_matches_reference_twice", enhance_matches_reference_twice},
         {"any_rate_keeps_length", any_rate_keeps_length},
+        {"progress_reports_monotonic_to_one", progress_reports_monotonic_to_one},
+        {"progress_does_not_change_output", progress_does_not_change_output},
+        {"null_progress_callback_is_silent", null_progress_callback_is_silent},
     };
     return run_tests(tests);
 }

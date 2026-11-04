@@ -30,6 +30,12 @@ reuse_ctx * reuse_load(const char * gguf_path, const char * device, int n_thread
  * the overlaps are joined with a raised-cosine crossfade. Results therefore differ slightly from
  * a single-pass run around the seams, because InstanceNorm statistics and the bidirectional
  * Mamba state only see one window at a time. The output always has n samples. */
+/* Optional progress reporting for reuse_enhance. fn is called from the calling thread with a
+ * fraction in [0, 1], non-decreasing across the whole call (all windows of a long input), ending
+ * with exactly 1.0f when reuse_enhance succeeds. NULL disables it. The output is bit-identical
+ * with and without a callback; with one, each window's graph runs in about 32 consecutive slices. */
+typedef void (*reuse_progress_fn)(float fraction, void * user);
+void        reuse_set_progress(reuse_ctx * ctx, reuse_progress_fn fn, void * user);
 int         reuse_enhance(reuse_ctx * ctx, const float * in, size_t n, int sample_rate, float * out);
 void        reuse_free(reuse_ctx * ctx);
 /* Thread-local; never NULL. */

@@ -14,6 +14,7 @@
 #include "weights.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,9 @@ struct GraphRun {
     void alloc(ggml_backend_t be, ggml_tensor * out) { alloc(be, std::vector<ggml_tensor *>{out}); }
     void alloc(ggml_backend_t be, const std::vector<ggml_tensor *> & outs);
     void compute(ggml_backend_t be);
+    // Same result as compute(), but runs the graph as `slices` consecutive node ranges
+    // (ggml_graph_view) and calls on_slice(done_fraction) after each one.
+    void compute_sliced(ggml_backend_t be, int slices, const std::function<void(double)> & on_slice);
     // Size of the backend compute buffer allocated by alloc() (0 before).
     size_t compute_bytes() const { return galloc_ ? ggml_gallocr_get_buffer_size(galloc_, 0) : 0; }
 
